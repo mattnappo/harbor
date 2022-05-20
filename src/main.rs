@@ -1,3 +1,6 @@
+use harbor::peer;
+
 fn main() {
-    println!("Hello, world!");
+    let peer = peer::Peer::new(true, 3300).unwrap();
+    peer.start().unwrap();
 }
