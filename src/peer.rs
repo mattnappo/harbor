@@ -1,16 +1,20 @@
+use crate::protocol::*;
 use crate::{Error, NetworkError, MAX_PEERS};
 use local_ip_address::local_ip;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::prelude::*;
 use std::net;
 use std::net::Ipv4Addr;
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 
 /// A key for a file
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Key(String);
 
 /// A String of the form ip:port
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PeerId(String);
 
 // TODO: Add a nonce field to this so that it differs
@@ -24,38 +28,7 @@ impl PeerId {
     }
 }
 
-/// Possible peer request types
-pub enum Request {
-    /// Responds with this peer's PeerId
-    PeerId,
-
-    /// Responds with this peer's list of stored files
-    List,
-
-    /// Asks this peer to add the given identity (id) to its table of peers
-    Join { id: PeerId, ip: Ipv4Addr, port: u16 },
-
-    /// Responds to the peer as to whether this peer has any recursive
-    /// record of the given key in the given tts
-    QueryKey { key: Key, tts: u16 },
-
-    /// Notifies the peer that holding_id has a record of the given key
-    RespondKey { holding_id: PeerId, key: Key },
-
-    /// Request for this peer to send its copy the given key's value
-    GetKey(Key),
-
-    /// Remove the given peer from this peer's table of peers
-    Leave(PeerId),
-
-    /// Respond with a success
-    Ok,
-
-    /// Respond with an error
-    Err(NetworkError),
-}
-
-/// A peer on the network
+/// A peer on the netwo:qrk
 #[derive(Debug)]
 pub struct Peer {
     port: u16,
@@ -82,21 +55,44 @@ impl Peer {
     }
 
     /// Start listening on this node
-    pub fn start(&self) -> std::io::Result<()> {
+    pub fn start(&self) -> Result<(), Error> {
         let socket = TcpListener::bind(self.peer_id().to_string())?;
 
         for stream in socket.incoming() {
-            self.handle_conn(stream?);
+            self.handle_conn(stream?)?;
         }
 
         Ok(())
     }
 
     /// Handle an incoming connection
-    fn handle_conn(&self, conn: TcpStream) {
+    fn handle_conn(&self, mut conn: TcpStream) -> Result<(), Error> {
         println!("handling new conn {:?}", conn);
 
-        thread::spawn(|| {});
+        let handle = thread::spawn(move || -> Result<(), Error> {
+            let mut buf = Vec::new();
+            conn.read_to_end(&mut buf)?;
+
+            let request = bincode::deserialize::<Request>(&buf[..])?;
+            match &request {
+                Request::Ping => Self::handle_ping(&mut conn, &request),
+                _ => todo!(),
+            };
+            Ok(())
+        });
+
+        match handle.join() {
+            Ok(_) => return Ok(()),
+            Err(e) => println!("{:?}", e),
+        };
+
+        Ok(())
+    }
+
+    fn handle_ping(conn: &mut TcpStream, request: &Request) -> Result<(), Error> {
+        println!("writing pong");
+        conn.write("Pong!".as_bytes()).unwrap();
+        Ok(())
     }
 
     /// Get the `PeerId` for this peer
