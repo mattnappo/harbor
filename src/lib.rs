@@ -6,6 +6,7 @@ pub mod peer;
 pub mod protocol;
 
 const MAX_PEERS: u8 = 32;
+const BOOTSTRAP_NODE: (&str, u16) = ("192.168.1.1", 3300);
 
 use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;

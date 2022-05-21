@@ -7,7 +7,7 @@ use std::io::prelude::*;
 use std::net;
 use std::net::Ipv4Addr;
 use std::net::{TcpListener, TcpStream};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 /// A key for a file
@@ -49,20 +49,26 @@ pub struct Peer {
     local: bool,
 
     /// A map from PeerId to (ip, port) pairs
-    peers: Arc<PeerStore>,
+    peers: Arc<Mutex<PeerStore>>,
 }
 
 impl Peer {
     /// Construct a new peer
     pub fn new(local: bool, port: u16) -> Result<Self, Error> {
+        let mut peers = Arc::new(HashMap::new());
+
         Ok(Self {
             port,
             max_peers: MAX_PEERS,
             ip: Self::get_local_ip()?,
             pub_ip: None,
             local,
-            peers: Arc::new(HashMap::new()),
+            peers: Arc::new(Mutex::new(HashMap::new())),
         })
+    }
+
+    pub fn add_peer(&mut self, new_peer: PeerId, ip: Ipv4Addr, port: u16) {
+        self.peers.lock()?.insert(new_peer, (ip, port));
     }
 
     /// Start listening on this node
@@ -109,6 +115,8 @@ impl Peer {
         }
         None
     }
+
+    fn send_request(&self, to_peer: PeerId, req: Request) {}
 
     /// Get the `PeerId` for this peer
     fn peer_id(&self) -> PeerId {
