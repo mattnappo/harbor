@@ -28,7 +28,7 @@ impl PeerId {
     }
 }
 
-/// A peer on the netwo:qrk
+/// A peer on the network
 #[derive(Debug)]
 pub struct Peer {
     port: u16,
@@ -75,23 +75,18 @@ impl Peer {
 
             let request = bincode::deserialize::<Request>(&buf[..])?;
             match &request {
-                Request::Ping => Self::handle_ping(&mut conn, &request),
+                Request::Ping => HarborProtocol::handle_ping(&mut conn, &request),
                 _ => todo!(),
             };
             Ok(())
         });
 
+        // idk how to handle this
         match handle.join() {
             Ok(_) => return Ok(()),
             Err(e) => println!("{:?}", e),
         };
 
-        Ok(())
-    }
-
-    fn handle_ping(conn: &mut TcpStream, request: &Request) -> Result<(), Error> {
-        println!("writing pong");
-        conn.write("Pong!".as_bytes()).unwrap();
         Ok(())
     }
 

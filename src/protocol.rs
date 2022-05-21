@@ -1,7 +1,10 @@
 use crate::peer::{Key, PeerId};
-use crate::NetworkError;
+use crate::{Error, NetworkError};
 use serde::{Deserialize, Serialize};
-use std::net::Ipv4Addr;
+use std::io::prelude::*;
+use std::net::{Ipv4Addr, TcpStream};
+
+type NetworkResult<T> = Result<T, NetworkError>;
 
 /// Possible peer request types
 #[derive(Serialize, Deserialize, Debug)]
@@ -41,13 +44,36 @@ pub enum Request {
     Err(NetworkError),
 }
 
-/* DO THIS LATER
 /// A general protocol for this framework
 pub trait Protocol {
-    pub fn handle_ping(TcpStream);
+    fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize>;
+    fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
+    fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
+    fn handle_join(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
+    /* ... */
+    fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
 }
 
-struct HarborProtocol;
+pub struct HarborProtocol;
 
-impl Protocol for HarborProtocol {}
-*/
+impl Protocol for HarborProtocol {
+    /// Handle an incoming Request::Ping
+    fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize> {
+        println!("writing pong");
+        conn.write("Pong!".as_bytes())
+            .map_err(|e| NetworkError::Fail(e.to_string()))
+    }
+    fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
+        Ok(())
+    }
+    fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
+        Ok(())
+    }
+    fn handle_join(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
+        Ok(())
+    }
+    /* ... */
+    fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
+        Ok(())
+    }
+}

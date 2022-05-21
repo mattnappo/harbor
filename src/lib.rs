@@ -12,13 +12,31 @@ use std::error::Error as StdError;
 use std::fmt;
 
 /// Some general error that happened on the network
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum NetworkError {
-    /// An unknown network failure
-    Fail,
+    Fail(String),
+}
 
-    /// A network io error
-    IoError,
+impl fmt::Display for NetworkError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NetworkError::Fail(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl StdError for NetworkError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match *self {
+            NetworkError::Fail(_) => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for NetworkError {
+    fn from(err: std::io::Error) -> NetworkError {
+        NetworkError::Fail(err.to_string())
+    }
 }
 
 /// The general crate error
@@ -29,9 +47,6 @@ pub enum Error {
     IoError(std::io::Error),
     BinaryError(bincode::Error),
 }
-
-#[derive(Debug, Clone)]
-struct NoIpError;
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
