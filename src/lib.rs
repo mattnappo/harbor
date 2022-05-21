@@ -39,6 +39,12 @@ impl From<std::io::Error> for NetworkError {
     }
 }
 
+impl From<bincode::Error> for NetworkError {
+    fn from(err: bincode::Error) -> NetworkError {
+        NetworkError::Fail(err.to_string())
+    }
+}
+
 /// The general crate error
 #[derive(Debug)]
 pub enum Error {
@@ -52,7 +58,10 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::NoIp => {
-                write!(f, "public or private ip cannot be found for this peer")
+                write!(
+                    f,
+                    "public or private ip cannot be found for this peer"
+                )
             }
             Error::Ipv6Disabled(ip) => {
                 write!(f, "ipv6 ip {} found, but ipv6 is disabled", ip)

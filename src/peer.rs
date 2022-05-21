@@ -7,6 +7,7 @@ use std::io::prelude::*;
 use std::net;
 use std::net::Ipv4Addr;
 use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use std::thread;
 
 /// A key for a file
@@ -14,8 +15,16 @@ use std::thread;
 pub struct Key(String);
 
 /// A String of the form ip:port
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Hash)]
 pub struct PeerId(String);
+
+impl std::cmp::PartialEq for PeerId {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for PeerId {}
 
 // TODO: Add a nonce field to this so that it differs
 impl PeerId {
@@ -28,6 +37,8 @@ impl PeerId {
     }
 }
 
+pub type PeerStore = HashMap<PeerId, (Ipv4Addr, u16)>;
+
 /// A peer on the network
 #[derive(Debug)]
 pub struct Peer {
@@ -38,7 +49,7 @@ pub struct Peer {
     local: bool,
 
     /// A map from PeerId to (ip, port) pairs
-    peers: HashMap<PeerId, (Ipv4Addr, u16)>,
+    peers: Arc<PeerStore>,
 }
 
 impl Peer {
@@ -50,7 +61,7 @@ impl Peer {
             ip: Self::get_local_ip()?,
             pub_ip: None,
             local,
-            peers: HashMap::new(),
+            peers: Arc::new(HashMap::new()),
         })
     }
 
@@ -69,25 +80,34 @@ impl Peer {
     fn handle_conn(&self, mut conn: TcpStream) -> Result<(), Error> {
         println!("handling new conn {:?}", conn);
 
-        let handle = thread::spawn(move || -> Result<(), Error> {
+        let peers = self.peers.clone();
+        thread::spawn(move || -> Result<(), Error> {
             let mut buf = Vec::new();
             conn.read_to_end(&mut buf)?;
 
             let request = bincode::deserialize::<Request>(&buf[..])?;
             match &request {
-                Request::Ping => HarborProtocol::handle_ping(&mut conn, &request),
+                Request::Ping => {
+                    HarborProtocol::handle_ping(&mut conn, &request)
+                }
+                Request::PeerStore => HarborProtocol::handle_peer_store(
+                    &mut conn, &request, &peers,
+                ),
                 _ => todo!(),
             };
             Ok(())
         });
 
-        // idk how to handle this
-        match handle.join() {
-            Ok(_) => return Ok(()),
-            Err(e) => println!("{:?}", e),
-        };
-
         Ok(())
+    }
+
+    /// Attempt to find a route to the given PeerId
+    // TODO: Eventually make this recursive with a supplied depth??
+    fn router(&self, peer: PeerId) -> Option<(PeerId, Ipv4Addr, u16)> {
+        if let Some(ip_port) = self.peers.clone().get(&peer) {
+            return Some((peer, ip_port.0, ip_port.1));
+        }
+        None
     }
 
     /// Get the `PeerId` for this peer

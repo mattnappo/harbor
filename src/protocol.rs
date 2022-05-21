@@ -1,4 +1,4 @@
-use crate::peer::{Key, PeerId};
+use crate::peer::{Key, PeerId, PeerStore};
 use crate::{Error, NetworkError};
 use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
@@ -17,6 +17,9 @@ pub enum Request {
 
     /// Responds with this peer's list of stored files
     List,
+
+    /// Responds with this peer's complete table of peers
+    PeerStore,
 
     /// Asks this peer to add the given identity (id) to its table of peers
     Join { id: PeerId, ip: Ipv4Addr, port: u16 },
@@ -46,34 +49,78 @@ pub enum Request {
 
 /// A general protocol for this framework
 pub trait Protocol {
-    fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize>;
-    fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
-    fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
-    fn handle_join(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
+    fn handle_ping(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<usize>;
+    fn handle_peer_id(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<()>;
+    fn handle_list(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<()>;
+    fn handle_peer_store(
+        conn: &mut TcpStream,
+        req: &Request,
+        ps: &PeerStore,
+    ) -> NetworkResult<usize>;
+    fn handle_join(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<()>;
     /* ... */
-    fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
+    fn handle_leave(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<()>;
 }
 
 pub struct HarborProtocol;
 
 impl Protocol for HarborProtocol {
     /// Handle an incoming Request::Ping
-    fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize> {
+    fn handle_ping(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<usize> {
         println!("writing pong");
         conn.write("Pong!".as_bytes())
             .map_err(|e| NetworkError::Fail(e.to_string()))
     }
-    fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
+    fn handle_peer_id(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<()> {
         Ok(())
     }
-    fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
+    fn handle_list(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<()> {
         Ok(())
     }
-    fn handle_join(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
+    fn handle_peer_store(
+        conn: &mut TcpStream,
+        req: &Request,
+        ps: &PeerStore,
+    ) -> NetworkResult<usize> {
+        println!("writing peer store");
+        conn.write(&bincode::serialize(ps)?[..])
+            .map_err(|e| NetworkError::Fail(e.to_string()))
+    }
+    fn handle_join(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<()> {
         Ok(())
     }
     /* ... */
-    fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
+    fn handle_leave(
+        conn: &mut TcpStream,
+        req: &Request,
+    ) -> NetworkResult<()> {
         Ok(())
     }
 }
