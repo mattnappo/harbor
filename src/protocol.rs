@@ -4,7 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
 use std::net::{Ipv4Addr, TcpStream};
 
-type NetworkResult<T> = Result<T, NetworkError>;
+pub type NetworkResult<T> = Result<T, NetworkError>;
+
+macro_rules! write_and_map {
+    ($c:expr, $t:expr) => {
+        $c.write($t).map_err(|e| NetworkError::Fail(e.to_string()))
+    };
+}
 
 /// Possible peer request types
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,6 +40,9 @@ pub enum Request {
     /// Request for this peer to send its copy the given key's value
     GetKey(Key),
 
+    /// Sync this peer's peerstore with another peer's peerstore in the given tts
+    SyncPeers { tts: u16 },
+
     /// Remove the given peer from this peer's table of peers
     Leave(PeerId),
 
@@ -49,56 +58,31 @@ pub enum Request {
 
 /// A general protocol for this framework
 pub trait Protocol {
-    fn handle_ping(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<usize>;
-    fn handle_peer_id(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<()>;
-    fn handle_list(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<()>;
+    fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize>;
+    fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
+    fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
     fn handle_peer_store(
         conn: &mut TcpStream,
         req: &Request,
         ps: &PeerStore,
     ) -> NetworkResult<usize>;
-    fn handle_join(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<()>;
+    fn handle_join(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
     /* ... */
-    fn handle_leave(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<()>;
+    fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
 }
 
 pub struct HarborProtocol;
 
 impl Protocol for HarborProtocol {
     /// Handle an incoming Request::Ping
-    fn handle_ping(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<usize> {
+    fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize> {
         println!("writing pong");
-        conn.write("Pong!".as_bytes())
-            .map_err(|e| NetworkError::Fail(e.to_string()))
+        write_and_map!(conn, "Pong!".as_bytes())
     }
-    fn handle_peer_id(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<()> {
+    fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
         Ok(())
     }
-    fn handle_list(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<()> {
+    fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
         Ok(())
     }
     fn handle_peer_store(
@@ -107,20 +91,14 @@ impl Protocol for HarborProtocol {
         ps: &PeerStore,
     ) -> NetworkResult<usize> {
         println!("writing peer store");
-        conn.write(&bincode::serialize(ps)?[..])
-            .map_err(|e| NetworkError::Fail(e.to_string()))
+        let ser = &bincode::serialize(ps)?[..];
+        write_and_map!(conn, ser)
     }
-    fn handle_join(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<()> {
+    fn handle_join(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
         Ok(())
     }
     /* ... */
-    fn handle_leave(
-        conn: &mut TcpStream,
-        req: &Request,
-    ) -> NetworkResult<()> {
+    fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
         Ok(())
     }
 }

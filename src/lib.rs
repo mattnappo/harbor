@@ -4,10 +4,12 @@
 
 pub mod peer;
 pub mod protocol;
+pub mod util;
 
-const MAX_PEERS: u8 = 32;
-const BOOTSTRAP_NODE: (&str, u16) = ("192.168.1.1", 3300);
+pub const MAX_PEERS: u8 = 32;
+pub const BOOTSTRAP: &str = "bootstrap.txt";
 
+use crate::peer::PeerId;
 use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use std::fmt;
@@ -16,20 +18,26 @@ use std::fmt;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetworkError {
     Fail(String),
+    NoRoute(PeerId),
+    DeadPeer(PeerId),
 }
 
 impl fmt::Display for NetworkError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             NetworkError::Fail(msg) => write!(f, "{}", msg),
+            NetworkError::NoRoute(id) => write!(f, "could not route to {:?}", id),
+            NetworkError::DeadPeer(p) => write!(f, "Peer {:?} is no longer alive", p),
         }
     }
 }
 
 impl StdError for NetworkError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match *self {
+        match self {
             NetworkError::Fail(_) => None,
+            NetworkError::NoRoute(_) => None,
+            NetworkError::DeadPeer(_) => None,
         }
     }
 }
@@ -59,10 +67,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::NoIp => {
-                write!(
-                    f,
-                    "public or private ip cannot be found for this peer"
-                )
+                write!(f, "public or private ip cannot be found for this peer")
             }
             Error::Ipv6Disabled(ip) => {
                 write!(f, "ipv6 ip {} found, but ipv6 is disabled", ip)

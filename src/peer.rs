@@ -1,4 +1,5 @@
 use crate::protocol::*;
+use crate::*;
 use crate::{Error, NetworkError, MAX_PEERS};
 use local_ip_address::local_ip;
 use serde::{Deserialize, Serialize};
@@ -55,8 +56,6 @@ pub struct Peer {
 impl Peer {
     /// Construct a new peer
     pub fn new(local: bool, port: u16) -> Result<Self, Error> {
-        let mut peers = Arc::new(HashMap::new());
-
         Ok(Self {
             port,
             max_peers: MAX_PEERS,
@@ -67,8 +66,11 @@ impl Peer {
         })
     }
 
+    /// Add a peer to this peer's list of known peers
     pub fn add_peer(&mut self, new_peer: PeerId, ip: Ipv4Addr, port: u16) {
-        self.peers.lock()?.insert(new_peer, (ip, port));
+        let peers = self.peers.clone();
+        let mut peers = peers.lock().unwrap();
+        peers.insert(new_peer, (ip, port));
     }
 
     /// Start listening on this node
@@ -82,6 +84,33 @@ impl Peer {
         Ok(())
     }
 
+    /// Read from the bootstrap file and add the bootstrap hosts to the PeerStore
+    fn bootstrap(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
+        let mut c = 0i32; // Number of bootstrapped peers
+
+        // Read each line from the bootstrap file
+        if let Ok(lines) = util::read_lines(crate::BOOTSTRAP) {
+            for line in lines {
+                // For each host
+                if let Ok(host) = line {
+                    // Parse the ip and port and construct a PeerId
+                    let data: Vec<String> =
+                        host.split(",").map(|s| s.to_string()).collect();
+                    if data.len() != 2 {
+                        continue;
+                    }
+
+                    // Get the ip and port
+                    let ip = data[0].parse::<Ipv4Addr>()?;
+                    let port: u16 = data[1].parse()?;
+                    self.add_peer(PeerId::from(ip, port), ip, port);
+                    c += 1;
+                }
+            }
+        }
+        Ok(c)
+    }
+
     /// Handle an incoming connection
     fn handle_conn(&self, mut conn: TcpStream) -> Result<(), Error> {
         println!("handling new conn {:?}", conn);
@@ -91,14 +120,13 @@ impl Peer {
             let mut buf = Vec::new();
             conn.read_to_end(&mut buf)?;
 
+            let peers = peers.lock().unwrap();
             let request = bincode::deserialize::<Request>(&buf[..])?;
             match &request {
-                Request::Ping => {
-                    HarborProtocol::handle_ping(&mut conn, &request)
+                Request::Ping => HarborProtocol::handle_ping(&mut conn, &request),
+                Request::PeerStore => {
+                    HarborProtocol::handle_peer_store(&mut conn, &request, &peers)
                 }
-                Request::PeerStore => HarborProtocol::handle_peer_store(
-                    &mut conn, &request, &peers,
-                ),
                 _ => todo!(),
             };
             Ok(())
@@ -110,13 +138,17 @@ impl Peer {
     /// Attempt to find a route to the given PeerId
     // TODO: Eventually make this recursive with a supplied depth??
     fn router(&self, peer: PeerId) -> Option<(PeerId, Ipv4Addr, u16)> {
-        if let Some(ip_port) = self.peers.clone().get(&peer) {
+        if let Some(ip_port) = self.peers.clone().lock().unwrap().get(&peer) {
             return Some((peer, ip_port.0, ip_port.1));
         }
         None
     }
 
-    fn send_request(&self, to_peer: PeerId, req: Request) {}
+    fn send_request(&self, to_peer: PeerId, req: Request) -> NetworkResult<()> {
+        // Assume, for now, that req is of type Request::Ping
+
+        Ok(())
+    }
 
     /// Get the `PeerId` for this peer
     fn peer_id(&self) -> PeerId {
