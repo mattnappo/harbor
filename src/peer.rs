@@ -29,11 +29,11 @@ impl Eq for PeerId {}
 
 // TODO: Add a nonce field to this so that it differs
 impl PeerId {
-    fn from(ip: net::Ipv4Addr, port: u16) -> Self {
+    pub fn from(ip: net::Ipv4Addr, port: u16) -> Self {
         Self(format!("{}:{}", ip, port))
     }
 
-    fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         self.0.to_string()
     }
 }
@@ -85,7 +85,7 @@ impl Peer {
     }
 
     /// Read from the bootstrap file and add the bootstrap hosts to the PeerStore
-    fn bootstrap(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
+    pub fn bootstrap(&mut self) -> Result<i32, Box<dyn std::error::Error>> {
         let mut c = 0i32; // Number of bootstrapped peers
 
         // Read each line from the bootstrap file
@@ -95,14 +95,14 @@ impl Peer {
                 if let Ok(host) = line {
                     // Parse the ip and port and construct a PeerId
                     let data: Vec<String> =
-                        host.split(",").map(|s| s.to_string()).collect();
+                        host.split(":").map(|s| s.to_string()).collect();
                     if data.len() != 2 {
                         continue;
                     }
-
-                    // Get the ip and port
                     let ip = data[0].parse::<Ipv4Addr>()?;
                     let port: u16 = data[1].parse()?;
+
+                    // Add the host
                     self.add_peer(PeerId::from(ip, port), ip, port);
                     c += 1;
                 }
@@ -144,12 +144,6 @@ impl Peer {
         None
     }
 
-    fn send_request(&self, to_peer: PeerId, req: Request) -> NetworkResult<()> {
-        // Assume, for now, that req is of type Request::Ping
-
-        Ok(())
-    }
-
     /// Get the `PeerId` for this peer
     fn peer_id(&self) -> PeerId {
         if self.local {
@@ -180,7 +174,8 @@ mod tests {
 
     #[test]
     fn new_peer() {
-        let peer = Peer::new(true, 3300);
+        let mut peer = Peer::new(true, 3300).unwrap();
+        peer.bootstrap().unwrap();
         println!("peer: {:#?}", peer);
     }
 }

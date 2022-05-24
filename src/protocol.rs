@@ -7,10 +7,13 @@ use std::net::{Ipv4Addr, TcpStream};
 pub type NetworkResult<T> = Result<T, NetworkError>;
 
 macro_rules! write_and_map {
+    //($c:ident, $t:expr) => {
     ($c:expr, $t:expr) => {
         $c.write($t).map_err(|e| NetworkError::Fail(e.to_string()))
     };
 }
+
+pub(crate) use write_and_map;
 
 /// Possible peer request types
 #[derive(Serialize, Deserialize, Debug)]
@@ -54,6 +57,11 @@ pub enum Request {
 
     /// Respond with an error
     Err(NetworkError),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Response {
+    Res(String),
 }
 
 /// A general protocol for this framework

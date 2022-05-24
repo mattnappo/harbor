@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+pub mod client;
 pub mod peer;
 pub mod protocol;
 pub mod util;
