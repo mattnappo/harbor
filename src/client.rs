@@ -3,6 +3,7 @@ use crate::protocol::{NetworkResult, Request, Response};
 use crate::*;
 use std::io::prelude::*;
 use std::net::TcpStream;
+use std::{thread, time};
 
 /// The ability to send requests and responses (superfluous trait?)
 pub trait Client {
@@ -30,12 +31,11 @@ impl Client for Peer {
 
     /// Send a response to a request to the given TcpStream
     fn send_response(conn: &mut TcpStream, res: Response) -> NetworkResult<usize> {
-        //let mut conn2 = TcpStream::connect("192.168.1.82:4400")?;
         let ser = &bincode::serialize(&res)?[..];
 
         println!("writing res {:#?} to {:?}\nraw: {:?}", res, conn, ser);
 
-        conn.write(ser)
+        conn.write(ser) // SAME CONN A
             .map_err(|e| NetworkError::Fail(e.to_string()))
     }
 }

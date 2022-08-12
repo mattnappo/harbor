@@ -80,13 +80,17 @@ impl Peer {
 
     /// Start listening on this node
     pub fn start(&self, send_pings: bool) -> Result<(), Error> {
+        // This loop will run forever
+        // TODO: Handle incoming connections in a separate thread
+        let socket = TcpListener::bind(self.peer_id().to_string())?;
+        println!("bound on socket {:?}", self.peer_id().to_string());
+
         if send_pings {
             self.send_pings().unwrap();
         }
 
-        // This loop will run forever
-        // TODO: Handle incoming connections in a separate thread
-        let socket = TcpListener::bind(self.peer_id().to_string())?;
+        println!("listening for incoming conns");
+        // Listen for new incoming connections (requests)
         for stream in socket.incoming() {
             self.handle_conn(stream?)?;
         }
@@ -143,8 +147,8 @@ impl Peer {
     /// Send a ping request to a peer
     fn send_ping(&self, to: &PeerId) -> Result<(), Error> {
         let mut conn = Self::send_request(&to, Request::Ping)?;
-
-        Ok(())
+        println!("waiting for response");
+        self.handle_response(conn)
     }
     /*
     fn send_ping(&self, to: &PeerId) -> Result<(), Error> {
@@ -163,14 +167,15 @@ impl Peer {
     }
     */
 
-    /// Handle an incoming connection (a request)
+    /// Handle a new incoming connection (a request)
     fn handle_conn(&self, mut conn: TcpStream) -> Result<(), Error> {
-        println!("handling new conn {:?}", conn);
+        println!("handling new conn {:?}", conn); // SAME CONN A
 
         let peers = self.peers.clone();
         thread::spawn(move || -> Result<(), Error> {
-            let mut buf = Vec::new();
-            conn.read_to_end(&mut buf)?;
+            println!("im in here");
+            let mut buf = [0u8; 4];
+            conn.read_exact(&mut buf)?;
 
             println!("buf: {buf:?}");
 
@@ -201,21 +206,28 @@ impl Peer {
                 _ => todo!(),
             };
 
+            Ok(())
+
+            /* upon second thought, response handling should NOT happen here
             // USE NEW RESPONSE HANDLER METHOD
 
-            /*
-            println!("handling response!");
-            // Handle response
+            println!("handling response");
             let mut res_buf = Vec::new();
-            conn.read(&mut res_buf)?;
-            println!("read {res_buf:?}");
+            loop {
+                // Handle response
+                conn.read_to_end(&mut res_buf)?;
+
+                if res_buf.len() > 0 {
+                    break;
+                }
+            }
+
+            println!("got response {res_buf:?}");
 
             let res = bincode::deserialize(&res_buf[..])?;
             // DO SOMETHING WITH THE RES TODO
             println!("got response: {res:?}");
             */
-
-            Ok(())
         })
         .join()
         .unwrap()

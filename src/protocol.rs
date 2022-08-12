@@ -91,7 +91,9 @@ impl Protocol for Peer {
     /// Handle an incoming Request::Ping
     fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize> {
         println!("writing pong");
-        Self::send_response(conn, Response::Pong)
+        let len = Self::send_response(conn, Response::Pong)?;
+        println!("finished writing pong");
+        Ok(len)
     }
 
     fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
