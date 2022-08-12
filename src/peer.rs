@@ -174,14 +174,19 @@ impl Peer {
         let peers = self.peers.clone();
         thread::spawn(move || -> Result<(), Error> {
             println!("im in here");
+            let mut buf = vec![0u8; MAX_TRANSFER_SIZE];
+            let len = conn.read(&mut buf)?;
+
+            /* this works for fixed len reads/writes
             let mut buf = [0u8; 4];
             conn.read_exact(&mut buf)?;
+            */
 
             println!("buf: {buf:?}");
 
-            println!("got data");
+            println!("req buf: {:?}", &buf[0..len]);
 
-            let request = bincode::deserialize::<Request>(&buf[..]).unwrap();
+            let request = bincode::deserialize::<Request>(&buf[0..len]).unwrap();
             println!("got data here");
 
             println!("request is {request:?}");
@@ -191,43 +196,26 @@ impl Peer {
 
             // Call the handlers defined in Protocol impl
             match &request {
-                Request::Ping => Self::handle_ping(&mut conn, &request),
-                Request::Join { id, ip, port } => Self::handle_join(
-                    &mut conn,
-                    &request,
-                    id.clone(),
-                    ip.clone(),
-                    port.clone(),
-                    &mut peers,
-                ),
+                Request::Ping => {
+                    Self::handle_ping(&mut conn, &request)?;
+                }
+                Request::Join { id, ip, port } => {
+                    Self::handle_join(
+                        &mut conn,
+                        &request,
+                        id.clone(),
+                        ip.clone(),
+                        port.clone(),
+                        &mut peers,
+                    )?;
+                }
                 Request::PeerStore => {
-                    Self::handle_peer_store(&mut conn, &request, &peers)
+                    Self::handle_peer_store(&mut conn, &request, &peers)?;
                 }
                 _ => todo!(),
-            };
-
-            Ok(())
-
-            /* upon second thought, response handling should NOT happen here
-            // USE NEW RESPONSE HANDLER METHOD
-
-            println!("handling response");
-            let mut res_buf = Vec::new();
-            loop {
-                // Handle response
-                conn.read_to_end(&mut res_buf)?;
-
-                if res_buf.len() > 0 {
-                    break;
-                }
             }
 
-            println!("got response {res_buf:?}");
-
-            let res = bincode::deserialize(&res_buf[..])?;
-            // DO SOMETHING WITH THE RES TODO
-            println!("got response: {res:?}");
-            */
+            Ok(())
         })
         .join()
         .unwrap()

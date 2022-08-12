@@ -7,6 +7,10 @@ use std::net::{Ipv4Addr, TcpStream};
 
 pub type NetworkResult<T> = Result<T, NetworkError>;
 
+/// The maximum size of data that can be in a request or response over
+/// the network
+pub const MAX_TRANSFER_SIZE: usize = 5096; // in bytes
+
 /// Possible peer request types
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Request {

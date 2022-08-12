@@ -2,7 +2,7 @@ use crate::peer::{Peer, PeerId};
 use crate::protocol::{NetworkResult, Request, Response};
 use crate::*;
 use std::io::prelude::*;
-use std::net::TcpStream;
+use std::net::{Shutdown, TcpStream};
 use std::{thread, time};
 
 /// The ability to send requests and responses (superfluous trait?)
@@ -35,7 +35,7 @@ impl Client for Peer {
 
         println!("writing res {:#?} to {:?}\nraw: {:?}", res, conn, ser);
 
-        conn.write(ser) // SAME CONN A
+        conn.write(ser) // SAME CONN
             .map_err(|e| NetworkError::Fail(e.to_string()))
     }
 }
