@@ -62,6 +62,7 @@ pub enum Error {
     Ipv6Disabled(std::net::Ipv6Addr),
     IoError(std::io::Error),
     BinaryError(bincode::Error),
+    NetworkError(NetworkError),
 }
 
 impl fmt::Display for Error {
@@ -74,7 +75,8 @@ impl fmt::Display for Error {
                 write!(f, "ipv6 ip {} found, but ipv6 is disabled", ip)
             }
             Error::IoError(e) => write!(f, "{:?}", e),
-            _ => write!(f, "other error"),
+            Error::BinaryError(e) => write!(f, "{:?}", e),
+            Error::NetworkError(e) => write!(f, "{:?}", e),
         }
     }
 }
@@ -86,6 +88,7 @@ impl StdError for Error {
             Error::Ipv6Disabled(ip) => None,
             Error::IoError(ref e) => Some(e),
             Error::BinaryError(ref e) => Some(e),
+            Error::NetworkError(ref e) => Some(e),
         }
     }
 }
@@ -99,5 +102,11 @@ impl From<std::io::Error> for Error {
 impl From<bincode::Error> for Error {
     fn from(err: bincode::Error) -> Error {
         Error::BinaryError(err)
+    }
+}
+
+impl From<NetworkError> for Error {
+    fn from(err: NetworkError) -> Error {
+        Error::NetworkError(err)
     }
 }

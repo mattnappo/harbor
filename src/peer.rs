@@ -1,3 +1,5 @@
+use crate::client::Client;
+use crate::protocol::Protocol;
 use crate::protocol::*;
 use crate::*;
 use crate::{Error, NetworkError, MAX_PEERS};
@@ -16,7 +18,7 @@ use std::thread;
 pub struct Key(String);
 
 /// A String of the form ip:port
-#[derive(Serialize, Deserialize, Debug, Hash)]
+#[derive(Serialize, Deserialize, Debug, Hash, Clone)]
 pub struct PeerId(String);
 
 impl std::cmp::PartialEq for PeerId {
@@ -27,9 +29,12 @@ impl std::cmp::PartialEq for PeerId {
 
 impl Eq for PeerId {}
 
-// TODO: Add a nonce field to this so that it differs
+/// A unique identifier for a peer. Given a (ip, port) pair, a
+/// PeerId can be generated. Given a PeerId, ip and port are not
+/// necessarily recoverable.
 impl PeerId {
     pub fn from(ip: net::Ipv4Addr, port: u16) -> Self {
+        // This will be a hash function eventually
         Self(format!("{}:{}", ip, port))
     }
 
@@ -40,7 +45,7 @@ impl PeerId {
 
 pub type PeerStore = HashMap<PeerId, (Ipv4Addr, u16)>;
 
-/// A peer on the network
+/// A peer on the network. This represents the peer running on this machine
 #[derive(Debug)]
 pub struct Peer {
     port: u16,
@@ -74,9 +79,14 @@ impl Peer {
     }
 
     /// Start listening on this node
-    pub fn start(&self) -> Result<(), Error> {
-        let socket = TcpListener::bind(self.peer_id().to_string())?;
+    pub fn start(&self, send_pings: bool) -> Result<(), Error> {
+        if send_pings {
+            self.send_pings().unwrap();
+        }
 
+        // This loop will run forever
+        // TODO: Handle incoming connections in a separate thread
+        let socket = TcpListener::bind(self.peer_id().to_string())?;
         for stream in socket.incoming() {
             self.handle_conn(stream?)?;
         }
@@ -102,16 +112,58 @@ impl Peer {
                     let ip = data[0].parse::<Ipv4Addr>()?;
                     let port: u16 = data[1].parse()?;
 
-                    // Add the host
-                    self.add_peer(PeerId::from(ip, port), ip, port);
-                    c += 1;
+                    // Add the host if it is not itself
+                    let bootstrap_id = PeerId::from(ip, port);
+                    if bootstrap_id != PeerId::from(self.ip, self.port) {
+                        c += 1;
+                        self.add_peer(bootstrap_id, ip, port);
+                    } else {
+                        println!(
+                            "skipping over boostrapping {:?}, it is localhost",
+                            bootstrap_id
+                        );
+                    }
                 }
             }
         }
+
         Ok(c)
     }
 
-    /// Handle an incoming connection
+    /// Send a ping to all nodes in the peerstore
+    pub fn send_pings(&self) -> Result<(), Error> {
+        let inner_peers = self.peers.clone();
+        let peers = inner_peers.lock().unwrap();
+        for id in peers.keys() {
+            self.send_ping(id)?;
+        }
+        Ok(())
+    }
+
+    /// Send a ping request to a peer
+    fn send_ping(&self, to: &PeerId) -> Result<(), Error> {
+        let mut conn = Self::send_request(&to, Request::Ping)?;
+
+        Ok(())
+    }
+    /*
+    fn send_ping(&self, to: &PeerId) -> Result<(), Error> {
+        let to = to.clone();
+        thread::spawn(move || -> Result<(), Error> {
+            let mut conn = Self::send_request(&to, Request::Ping)?;
+            let mut buf = Vec::new();
+            conn.read_to_end(&mut buf)?;
+
+            println!("read buffer: {buf:?}");
+
+            Ok(())
+        })
+        .join()
+        .unwrap()
+    }
+    */
+
+    /// Handle an incoming connection (a request)
     fn handle_conn(&self, mut conn: TcpStream) -> Result<(), Error> {
         println!("handling new conn {:?}", conn);
 
@@ -120,19 +172,82 @@ impl Peer {
             let mut buf = Vec::new();
             conn.read_to_end(&mut buf)?;
 
-            let peers = peers.lock().unwrap();
-            let request = bincode::deserialize::<Request>(&buf[..])?;
+            println!("buf: {buf:?}");
+
+            println!("got data");
+
+            let request = bincode::deserialize::<Request>(&buf[..]).unwrap();
+            println!("got data here");
+
+            println!("request is {request:?}");
+
+            // Handle request
+            let mut peers = peers.lock().unwrap();
+
+            // Call the handlers defined in Protocol impl
             match &request {
-                Request::Ping => HarborProtocol::handle_ping(&mut conn, &request),
+                Request::Ping => Self::handle_ping(&mut conn, &request),
+                Request::Join { id, ip, port } => Self::handle_join(
+                    &mut conn,
+                    &request,
+                    id.clone(),
+                    ip.clone(),
+                    port.clone(),
+                    &mut peers,
+                ),
                 Request::PeerStore => {
-                    HarborProtocol::handle_peer_store(&mut conn, &request, &peers)
+                    Self::handle_peer_store(&mut conn, &request, &peers)
                 }
                 _ => todo!(),
             };
-            Ok(())
-        });
 
-        Ok(())
+            // USE NEW RESPONSE HANDLER METHOD
+
+            /*
+            println!("handling response!");
+            // Handle response
+            let mut res_buf = Vec::new();
+            conn.read(&mut res_buf)?;
+            println!("read {res_buf:?}");
+
+            let res = bincode::deserialize(&res_buf[..])?;
+            // DO SOMETHING WITH THE RES TODO
+            println!("got response: {res:?}");
+            */
+
+            Ok(())
+        })
+        .join()
+        .unwrap()
+    }
+
+    /// Handle a response
+    fn handle_response(&self, mut conn: TcpStream) -> Result<(), Error> {
+        println!("handling response from conn {conn:?}");
+
+        thread::spawn(move || -> Result<(), Error> {
+            let mut buf = Vec::new();
+            conn.read_to_end(&mut buf)?;
+            println!("read buf {buf:?}");
+
+            println!("buf: {buf:?}");
+
+            println!("got data");
+
+            let response = bincode::deserialize::<Response>(&buf[..]).unwrap();
+            println!("got data here");
+
+            println!("response is {response:?}");
+
+            // Call the handlers defined in Protocol impl
+            match &response {
+                Response::Pong => println!("got a pong from {conn:?}!"),
+                _ => todo!(),
+            };
+            Ok(())
+        })
+        .join()
+        .unwrap()
     }
 
     /// Attempt to find a route to the given PeerId

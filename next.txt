@@ -1,0 +1,19 @@
+doing something with the peer response,
+making sure that all responses send legit enums and not just random bytes
+in order to make sure that everything is tagged and serialized properly
+so that when u deserialize, you know the request type (which tells you
+which handler to send it to / how to deconstruct the data
+
+
+another question
+should i have that `Client` trait?
+i should keep the request/response functions though
+
+how to make protocol trait functions take in data better
+
+more pressing:
+should requests be sent without directly awaiting a response?
+should that stream stay open? or should the peer responding re-dial
+the requesting peer each time? (so that the requester doesnt have to block)
+then each request/response pair will be given an ID to keep track of which
+response corresponds to which request

@@ -1,31 +1,41 @@
 use crate::peer::{Peer, PeerId};
-use crate::protocol::write_and_map;
 use crate::protocol::{NetworkResult, Request, Response};
 use crate::*;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
+/// The ability to send requests and responses (superfluous trait?)
 pub trait Client {
-    fn send_request(to_peer: PeerId, req: Request) -> NetworkResult<usize>;
-    fn send_response(to_peer: PeerId, res: Response) -> NetworkResult<usize>;
+    fn send_request(to_peer: &PeerId, req: Request) -> NetworkResult<TcpStream>;
+    fn send_response(conn: &mut TcpStream, res: Response) -> NetworkResult<usize>;
 }
 
 impl Client for Peer {
     /// Send a request to a peer. The input PeerId `to_peer` should always
     /// be from the output of the routing function.
-    fn send_request(to_peer: PeerId, req: Request) -> NetworkResult<usize> {
+    fn send_request(to_peer: &PeerId, req: Request) -> NetworkResult<TcpStream> {
         // Dial the peer
-        let mut stream = TcpStream::connect(to_peer.to_string())?;
+        let mut conn = TcpStream::connect(to_peer.to_string())?;
+        println!("dialed addr: {:?}", to_peer.to_string());
+        println!("built connection {:?}", conn);
 
-        println!("writing req {:#?} to {:?}", req, to_peer);
-
-        // Assume, for now, that req is of type Request::Ping
+        // Assume, for now, that req is of type Request::Ping (why did i write this)
         let ser = &bincode::serialize(&req)?[..];
 
-        write_and_map!(stream, ser)
+        println!("writing req {:#?} to {:?}\nraw: {:?}", req, to_peer, ser);
+
+        conn.write(ser)?;
+        Ok(conn)
     }
 
-    fn send_response(to_peer: PeerId, res: Response) -> NetworkResult<usize> {
-        todo!();
+    /// Send a response to a request to the given TcpStream
+    fn send_response(conn: &mut TcpStream, res: Response) -> NetworkResult<usize> {
+        //let mut conn2 = TcpStream::connect("192.168.1.82:4400")?;
+        let ser = &bincode::serialize(&res)?[..];
+
+        println!("writing res {:#?} to {:?}\nraw: {:?}", res, conn, ser);
+
+        conn.write(ser)
+            .map_err(|e| NetworkError::Fail(e.to_string()))
     }
 }

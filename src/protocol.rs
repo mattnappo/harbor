@@ -1,4 +1,5 @@
-use crate::peer::{Key, PeerId, PeerStore};
+use crate::client::Client;
+use crate::peer::*;
 use crate::{Error, NetworkError};
 use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
@@ -6,31 +7,26 @@ use std::net::{Ipv4Addr, TcpStream};
 
 pub type NetworkResult<T> = Result<T, NetworkError>;
 
-macro_rules! write_and_map {
-    //($c:ident, $t:expr) => {
-    ($c:expr, $t:expr) => {
-        $c.write($t).map_err(|e| NetworkError::Fail(e.to_string()))
-    };
-}
-
-pub(crate) use write_and_map;
-
 /// Possible peer request types
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Request {
     /// Respond with Pong!
     Ping,
 
-    /// Responds with this peer's PeerId
+    /// Ask this peer for its PeerId
+    /// Responds with Response::PeerId
     PeerId,
 
-    /// Responds with this peer's list of stored files
+    /// Asks this peer for its list of stored files
+    /// Responds with Response::List
     List,
 
-    /// Responds with this peer's complete table of peers
+    /// Ask for this peer's PeerStore
+    /// Responds Response::PeerStore
     PeerStore,
 
     /// Asks this peer to add the given identity (id) to its table of peers
+    /// Responds with Response::Msg or Response::Err
     Join { id: PeerId, ip: Ipv4Addr, port: u16 },
 
     /// Responds to the peer as to whether this peer has any recursive
@@ -48,20 +44,25 @@ pub enum Request {
 
     /// Remove the given peer from this peer's table of peers
     Leave(PeerId),
-
-    /// Respond with a message
-    Msg(String),
-
-    /// Respond with success
-    Ok,
-
-    /// Respond with an error
-    Err(NetworkError),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
-    Res(String),
+    /// Respond with success
+    Ok,
+
+    /// Respond to a `Request::Ping`
+    Pong,
+
+    /// Respond with an error
+    Err(NetworkError),
+
+    /// Respond with a string message
+    Msg(String),
+
+    /// A complete PeerStore response
+    /// Is a result of Request::PeerStore
+    PeerStore(PeerStore),
 }
 
 /// A general protocol for this framework
@@ -72,40 +73,67 @@ pub trait Protocol {
     fn handle_peer_store(
         conn: &mut TcpStream,
         req: &Request,
-        ps: &PeerStore,
+        ps: &PeerStore, // Band-aid solution
     ) -> NetworkResult<usize>;
-    fn handle_join(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
+    fn handle_join(
+        conn: &mut TcpStream,
+        req: &Request,
+        id: PeerId,
+        ip: Ipv4Addr,
+        port: u16,
+        ps: &mut PeerStore,
+    ) -> NetworkResult<usize>;
     /* ... */
     fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
 }
 
-pub struct HarborProtocol;
-
-impl Protocol for HarborProtocol {
+impl Protocol for Peer {
     /// Handle an incoming Request::Ping
     fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize> {
         println!("writing pong");
-        write_and_map!(conn, "Pong!".as_bytes())
+        Self::send_response(conn, Response::Pong)
     }
+
     fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
         Ok(())
     }
+
     fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
         Ok(())
     }
+
     fn handle_peer_store(
         conn: &mut TcpStream,
         req: &Request,
         ps: &PeerStore,
     ) -> NetworkResult<usize> {
         println!("writing peer store");
-        let ser = &bincode::serialize(ps)?[..];
-        write_and_map!(conn, ser)
+        //let ser = &bincode::serialize(ps)?[..];
+
+        //write_and_map!(conn, &Response::PeerStore(ps.to_owned()))
+        Self::send_response(conn, Response::PeerStore(ps.to_owned()))
     }
-    fn handle_join(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
-        Ok(())
+
+    fn handle_join(
+        conn: &mut TcpStream,
+        req: &Request,
+        id: PeerId,
+        ip: Ipv4Addr,
+        port: u16,
+        ps: &mut PeerStore,
+    ) -> NetworkResult<usize> {
+        if ps.insert(id, (ip, port)).is_some() {
+            return Self::send_response(
+                conn,
+                Response::Err(NetworkError::Fail("peer already joined".to_string())),
+            );
+        }
+        println!("new peerstore (after join): {:?}", ps);
+        Self::send_response(conn, Response::Msg("join success".to_string()))
     }
+
     /* ... */
+
     fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
         Ok(())
     }
