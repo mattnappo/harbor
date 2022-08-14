@@ -2,18 +2,17 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-pub mod client;
 pub mod peer;
 pub mod protocol;
+pub mod transport;
 pub mod util;
 
 pub const MAX_PEERS: u8 = 32;
-pub const BOOTSTRAP: &str = "bootstrap.txt";
+pub const BOOTSTRAP_FILE: &str = "bootstrap.txt";
 
 use crate::peer::PeerId;
 use serde::{Deserialize, Serialize};
-use std::error::Error as StdError;
-use std::fmt;
+use std::{error::Error as StdError, fmt};
 
 /// Some general error that happened on the network
 #[derive(Debug, Serialize, Deserialize)]

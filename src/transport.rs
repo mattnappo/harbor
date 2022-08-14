@@ -1,17 +1,21 @@
-use crate::peer::{Peer, PeerId};
-use crate::protocol::{NetworkResult, Request, Response};
-use crate::*;
-use std::io::prelude::*;
-use std::net::{Shutdown, TcpStream};
-use std::{thread, time};
+use crate::{
+    peer::{Peer, PeerId},
+    protocol::{NetworkResult, Request, Response},
+    NetworkError,
+};
+use std::{
+    io::prelude::*,
+    net::{Shutdown, TcpStream},
+    thread, time,
+};
 
-/// The ability to send requests and responses (superfluous trait?)
-pub trait Client {
+/// Send requests to a peer, and send responses back
+pub trait Transport {
     fn send_request(to_peer: &PeerId, req: Request) -> NetworkResult<TcpStream>;
     fn send_response(conn: &mut TcpStream, res: Response) -> NetworkResult<usize>;
 }
 
-impl Client for Peer {
+impl Transport for Peer {
     /// Send a request to a peer. The input PeerId `to_peer` should always
     /// be from the output of the routing function.
     fn send_request(to_peer: &PeerId, req: Request) -> NetworkResult<TcpStream> {

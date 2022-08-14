@@ -1,9 +1,9 @@
-use crate::client::Client;
-use crate::peer::*;
-use crate::{Error, NetworkError};
+use crate::{peer::*, transport::Transport, Error, NetworkError};
 use serde::{Deserialize, Serialize};
-use std::io::prelude::*;
-use std::net::{Ipv4Addr, TcpStream};
+use std::{
+    io::prelude::*,
+    net::{Ipv4Addr, TcpStream},
+};
 
 pub type NetworkResult<T> = Result<T, NetworkError>;
 
@@ -14,7 +14,8 @@ pub const MAX_TRANSFER_SIZE: usize = 5096; // in bytes
 /// Possible peer request types
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Request {
-    /// Respond with Pong!
+    /// Ping this peer
+    /// Responds with Response::Pong
     Ping,
 
     /// Ask this peer for its PeerId
@@ -95,7 +96,7 @@ impl Protocol for Peer {
     /// Handle an incoming Request::Ping
     fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize> {
         println!("writing pong");
-        let len = Self::send_response(conn, Response::Pong)?;
+        let len = Peer::send_response(conn, Response::Pong)?;
         println!("finished writing pong");
         Ok(len)
     }
@@ -117,7 +118,7 @@ impl Protocol for Peer {
         //let ser = &bincode::serialize(ps)?[..];
 
         //write_and_map!(conn, &Response::PeerStore(ps.to_owned()))
-        Self::send_response(conn, Response::PeerStore(ps.to_owned()))
+        Peer::send_response(conn, Response::PeerStore(ps.to_owned()))
     }
 
     fn handle_join(
@@ -128,14 +129,13 @@ impl Protocol for Peer {
         port: u16,
         ps: &mut PeerStore,
     ) -> NetworkResult<usize> {
-        if ps.insert(id, (ip, port)).is_some() {
-            return Self::send_response(
+        if ps.insert(id) {
+            return Peer::send_response(
                 conn,
                 Response::Err(NetworkError::Fail("peer already joined".to_string())),
             );
         }
-        println!("new peerstore (after join): {:?}", ps);
-        Self::send_response(conn, Response::Msg("join success".to_string()))
+        Peer::send_response(conn, Response::Msg("join success".to_string()))
     }
 
     /* ... */
