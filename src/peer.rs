@@ -5,6 +5,7 @@ use crate::{
     util, {Error, NetworkError, MAX_PEERS},
 };
 use chrono;
+use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -33,7 +34,14 @@ impl std::cmp::PartialEq for PeerId {
     }
 }
 
+impl std::cmp::PartialEq for PeerStoreEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 impl Eq for PeerId {}
+impl Eq for PeerStoreEntry {}
 
 impl PeerId {
     pub fn new(ip: Ipv4Addr, port: u16) -> Self {
@@ -56,20 +64,38 @@ impl PeerId {
         self.id.clone()
     }
 
+    /// Return this PeerId in the format ip:port
+    pub fn as_socket(&self) -> String {
+        format!("{}:{}", self.ip, self.port)
+    }
+
+    /// Return this PeerId's ip
     pub fn ip(&self) -> Ipv4Addr {
         self.ip
     }
 
+    /// Return this PeerId's port
     pub fn port(&self) -> u16 {
         self.port
     }
 }
 
 /// An entry in a PeerStore
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Derivative, Debug, Serialize, Deserialize, Clone)]
+#[derivative(Hash)]
 pub struct PeerStoreEntry {
-    last_seen: chrono::NaiveDateTime,
+    #[derivative(Hash = "ignore")]
+    last_seen: Option<chrono::NaiveDateTime>,
     id: PeerId,
+}
+
+impl PeerStoreEntry {
+    pub fn new(id: PeerId) -> Self {
+        Self {
+            last_seen: None,
+            id,
+        }
+    }
 }
 
 pub type PeerStore = HashSet<PeerStoreEntry>;
@@ -107,7 +133,7 @@ impl Peer {
         if new_peer == self.id {
             return false;
         }
-        peers.insert(new_peer)
+        peers.insert(PeerStoreEntry::new(new_peer))
     }
 
     /// Start listening on this peer
@@ -118,7 +144,7 @@ impl Peer {
 
         // This loop will run forever
         // TODO: Handle incoming connections in a separate thread
-        let socket = TcpListener::bind(&self.id.id)?;
+        let socket = TcpListener::bind(&self.id.as_socket())?;
         println!("bound on socket {:?}", self.id);
 
         // TODO: Delete, replace with RPC
@@ -166,8 +192,8 @@ impl Peer {
     pub fn send_pings(&self) -> Result<(), Error> {
         let inner_peers = self.peers.clone();
         let peers = inner_peers.lock().unwrap();
-        for id in peers.iter() {
-            self.send_ping(id)?;
+        for id in peers.iter().map(|peer| peer.id.clone()) {
+            self.send_ping(&id)?;
         }
         Ok(())
     }
@@ -259,7 +285,13 @@ impl Peer {
 
         // If not, check if the desired peer is in our PeerStore, and
         // return it
-        self.peers.clone().lock().unwrap().get(&peer).cloned()
+        self.peers
+            .clone()
+            .lock()
+            .unwrap()
+            .get(&PeerStoreEntry::new(peer))
+            .cloned()
+            .map(|p| p.id)
     }
 }
 

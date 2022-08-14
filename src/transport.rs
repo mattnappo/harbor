@@ -20,8 +20,8 @@ impl Transport for Peer {
     /// be from the output of the routing function.
     fn send_request(to_peer: &PeerId, req: Request) -> NetworkResult<TcpStream> {
         // Dial the peer
-        let mut conn = TcpStream::connect(to_peer.to_string())?;
-        println!("dialed addr: {:?}", to_peer.to_string());
+        let mut conn = TcpStream::connect(to_peer.as_socket())?;
+        println!("dialed addr: {:?}", to_peer);
         println!("built connection {:?}", conn);
 
         // Assume, for now, that req is of type Request::Ping (why did i write this)

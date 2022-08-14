@@ -18,4 +18,4 @@ Next up
 [ ] Add pub/priv keys, digital signatures, and authentication
 [ ] Refactor result type to include PeerId from sender. use c-style
     embedded enum
-
+[ ] Add last_seen functionality

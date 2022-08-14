@@ -129,7 +129,7 @@ impl Protocol for Peer {
         port: u16,
         ps: &mut PeerStore,
     ) -> NetworkResult<usize> {
-        if ps.insert(id) {
+        if ps.insert(PeerStoreEntry::new(id)) {
             return Peer::send_response(
                 conn,
                 Response::Err(NetworkError::Fail("peer already joined".to_string())),
