@@ -8,6 +8,8 @@ use std::{
     path::Path,
 };
 
+pub const HASH_LEN: usize = 32;
+
 pub fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
 where
     P: AsRef<Path>,
@@ -16,12 +18,13 @@ where
     Ok(io::BufReader::new(file).lines())
 }
 
-/// Hash a vector of bytes to a hex string using sha256
+/// Hash a vector of bytes to a hex string using sha256,
+/// and clip the output to set output len (`HASH_LEN`)
 pub fn hash_sha256(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     let result = hasher.finalize();
-    hex::encode(&result)
+    hex::encode(&result)[0..HASH_LEN].to_string()
 }
 
 /// Get this system's local ip address
