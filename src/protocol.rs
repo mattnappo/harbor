@@ -21,7 +21,7 @@ pub enum Request {
 
     /// Ask this peer for its PeerId
     /// Responds with Response::PeerId
-    PeerId,
+    Identity,
 
     /// Asks this peer for its list of stored files
     /// Responds with Response::List
@@ -32,8 +32,8 @@ pub enum Request {
     PeerStore,
 
     /// Asks this peer to add the given identity (id) to its table of peers
-    /// Responds with Response::Msg or Response::Err
-    Join { id: PeerId, ip: Ipv4Addr, port: u16 },
+    /// Responds with Response::Ok or Response::Err
+    Join(PeerId),
 
     /// Responds to the peer as to whether this peer has any recursive
     /// record of the given key in the given tts
@@ -43,7 +43,7 @@ pub enum Request {
     RespondKey { holding_id: PeerId, key: Key },
 
     /// Request for this peer to send its copy the given key's value
-    GetKey(Key),
+    Get(Key),
 
     /// Sync this peer's peerstore with another peer's peerstore in the given tts
     SyncPeers { tts: u16 },
@@ -57,74 +57,88 @@ pub enum Response {
     /// Respond with success
     Ok,
 
-    /// Respond to a `Request::Ping`
-    Pong,
-
     /// Respond with an error
     Err(NetworkError),
 
     /// Respond with a string message
     Msg(String),
 
-    /// A complete PeerStore response
-    /// Is a result of Request::PeerStore
+    /* each variant corresponds to a request */
+    /// Respond to a `Request::Ping`
+    Pong,
+
+    /// A response containing a single PeerId
+    Identity(PeerId),
+
+    /// Responds with a list of this peer's stored files
+    List(Vec<Key>),
+
+    /// Respond with this Peer's complete PeerStore
+    /// Responds to Request::PeerStore
     PeerStore(PeerStore),
 }
 
 /// A general protocol for this framework
+/*
+    Ping
+    Identity
+    List
+    PeerStore
+    Join
+    QueryKey
+    RespondKey
+    Get
+    SyncPeers
+    Leave
+*/
+
 pub trait Protocol {
-    fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize>;
-    fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
-    fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
-    fn handle_peer_store(
-        conn: &mut TcpStream,
-        req: &Request,
-        ps: &PeerStore, // Band-aid solution
-    ) -> NetworkResult<usize>;
+    fn handle_ping(&self, conn: &mut TcpStream) -> NetworkResult<usize>;
+    fn handle_identity(&self, conn: &mut TcpStream) -> NetworkResult<usize>;
+    fn handle_list(&self, conn: &mut TcpStream) -> NetworkResult<usize>;
+    fn handle_peerstore(&self, conn: &mut TcpStream) -> NetworkResult<usize>;
     fn handle_join(
+        &mut self,
         conn: &mut TcpStream,
-        req: &Request,
-        id: PeerId,
-        ip: Ipv4Addr,
-        port: u16,
-        ps: &mut PeerStore,
+        new_peer: PeerId,
     ) -> NetworkResult<usize>;
     /* ... */
-    fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()>;
+    fn handle_leave(&self, conn: &mut TcpStream) -> NetworkResult<usize>;
 }
 
 impl Protocol for Peer {
     /// Handle an incoming Request::Ping
-    fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize> {
-        let len = Peer::send_response(conn, Response::Pong)?;
-        Ok(len)
+    fn handle_ping(&self, conn: &mut TcpStream) -> NetworkResult<usize> {
+        Peer::send_response(conn, Response::Pong)
     }
 
-    fn handle_peer_id(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
-        Ok(())
+    /// Handle an incoming Request::Identity
+    fn handle_identity(&self, conn: &mut TcpStream) -> NetworkResult<usize> {
+        Peer::send_response(conn, Response::Identity(self.id.clone()))
     }
 
-    fn handle_list(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
-        Ok(())
+    /// Return a list of keys stored on this peer
+    fn handle_list(&self, conn: &mut TcpStream) -> NetworkResult<usize> {
+        Peer::send_response(
+            conn,
+            Response::Err(NetworkError::Fail("no keys stored yet".to_string())),
+        )
     }
 
-    fn handle_peer_store(
-        conn: &mut TcpStream,
-        req: &Request,
-        ps: &PeerStore,
-    ) -> NetworkResult<usize> {
-        Peer::send_response(conn, Response::PeerStore(ps.to_owned()))
+    /// Return this peer's entire PeerStore
+    fn handle_peerstore(&self, conn: &mut TcpStream) -> NetworkResult<usize> {
+        let peers = self.peers.clone();
+        let peers = peers.lock().unwrap();
+        Peer::send_response(conn, Response::PeerStore(peers.clone()))
     }
 
+    /// Request to join this peer's PeerStore
     fn handle_join(
+        &mut self,
         conn: &mut TcpStream,
-        req: &Request,
-        id: PeerId,
-        ip: Ipv4Addr,
-        port: u16,
-        ps: &mut PeerStore,
+        new_peer: PeerId,
     ) -> NetworkResult<usize> {
-        if ps.insert(PeerStoreEntry::new(id)) {
+        if self.add_peer(self.id.clone()) {
             return Peer::send_response(
                 conn,
                 Response::Err(NetworkError::Fail("peer already joined".to_string())),
@@ -135,7 +149,7 @@ impl Protocol for Peer {
 
     /* ... */
 
-    fn handle_leave(conn: &mut TcpStream, req: &Request) -> NetworkResult<()> {
-        Ok(())
+    fn handle_leave(&self, conn: &mut TcpStream) -> NetworkResult<usize> {
+        Ok(0)
     }
 }

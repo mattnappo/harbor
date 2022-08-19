@@ -1,7 +1,7 @@
 how to make protocol trait functions take in data better
 
 Next up
-[ ] Logging / clean print statements
+[X] Logging / clean print statements
 [X] Implement PeerId hashes
 [X] Clean up code
 [X] Rename `Client` to `Transport`

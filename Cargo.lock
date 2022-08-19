@@ -401,6 +401,7 @@ dependencies = [
  "chrono",
  "derivative",
  "env_logger",
+ "futures",
  "hex",
  "local-ip-address",
  "log",

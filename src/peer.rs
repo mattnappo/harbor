@@ -53,8 +53,7 @@ impl Eq for PeerStoreEntry {}
 
 impl PeerId {
     pub fn new(ip: Ipv4Addr, port: u16) -> Self {
-        // TODO: once encryption is added, the hash will be hash of
-        // peer's pubkey
+        // TODO: once encryption is added, the hash will be of peer's pubkey
         let data = format!("{ip}:{port}");
         let hash = util::hash_sha256(data.as_bytes());
         Self {
@@ -111,13 +110,13 @@ pub type PeerStore = HashSet<PeerStoreEntry>;
 /// A peer on the network. This represents the peer running on this machine
 #[derive(Debug)]
 pub struct Peer {
-    id: PeerId,
+    pub(crate) id: PeerId,
     max_peers: u8,
-    pub_ip: Option<Ipv4Addr>,
+    pub_ip: Option<Ipv4Addr>, // Deprecated
     local: bool,
 
     /// A map from PeerId to (ip, port) pairs
-    peers: Arc<Mutex<PeerStore>>,
+    pub(crate) peers: Arc<Mutex<PeerStore>>,
 }
 
 impl Peer {
@@ -147,7 +146,7 @@ impl Peer {
     /// Start listening on this peer
     /// TODO: Run a grpc server (async?) to run local client API to
     /// interface with the node
-    pub fn start(&mut self, send_pings: bool) -> Result<(), Error> {
+    pub fn start(mut self, send_pings: bool) -> Result<(), Error> {
         self.bootstrap()?; // Bootstrap this peer
 
         // This loop will run forever
@@ -165,7 +164,7 @@ impl Peer {
             info!("listening for incoming connections");
             // Listen for new incoming connections (requests)
             for stream in socket.incoming() {
-                self.handle_conn(stream?)?;
+                self = self.handle_conn(stream?)?;
             }
         }
     }
@@ -197,57 +196,35 @@ impl Peer {
         Ok(count)
     }
 
-    /// Send a ping to all nodes in the peerstore
-    pub fn send_pings(&self) -> Result<(), Error> {
-        let inner_peers = self.peers.clone();
-        let peers = inner_peers.lock().unwrap();
-        for id in peers.iter().map(|peer| peer.id.clone()) {
-            self.send_ping(&id)?;
-        }
-        Ok(())
-    }
-
-    /// Send a ping request to a peer
-    pub fn send_ping(&self, to: &PeerId) -> Result<(), Error> {
-        let conn = Peer::send_request(&to, Request::Ping)?;
-        self.handle_response(conn)
-    }
-
     /// Handle a new incoming connection (a request)
-    fn handle_conn(&self, mut conn: TcpStream) -> Result<(), Error> {
+    /// TOOD: convert this function into async
+    fn handle_conn(mut self, mut conn: TcpStream) -> Result<Self, Error> {
         let peers = self.peers.clone();
-        thread::spawn(move || -> Result<(), Error> {
+        thread::spawn(move || -> Result<Self, Error> {
             let mut buf = vec![0u8; MAX_TRANSFER_SIZE];
             let len = conn.read(&mut buf)?;
             let request = bincode::deserialize::<Request>(&buf[0..len]).unwrap();
 
             info!("handling request {request:?} from {conn:?}");
 
-            // Handle request
-            let mut peers = peers.lock().unwrap();
-
             // Call the handlers defined in Protocol impl
-            match &request {
+            match request {
                 Request::Ping => {
-                    Peer::handle_ping(&mut conn, &request)?;
+                    self.handle_ping(&mut conn)?;
                 }
-                Request::Join { id, ip, port } => {
-                    Peer::handle_join(
-                        &mut conn,
-                        &request,
-                        id.clone(),
-                        ip.clone(),
-                        port.clone(),
-                        &mut peers,
-                    )?;
+                Request::Identity => {
+                    self.handle_identity(&mut conn)?;
+                }
+                Request::Join(id) => {
+                    self.handle_join(&mut conn, id)?;
                 }
                 Request::PeerStore => {
-                    Peer::handle_peer_store(&mut conn, &request, &peers)?;
+                    self.handle_peerstore(&mut conn)?;
                 }
                 _ => todo!(),
             }
 
-            Ok(())
+            Ok(self)
         })
         .join()
         .unwrap()
@@ -292,6 +269,24 @@ impl Peer {
             .get(&PeerStoreEntry::new(peer))
             .cloned()
             .map(|p| p.id)
+    }
+
+    /* Public functions define interface to Peer */
+
+    /// Send a ping to all nodes in the peerstore
+    pub fn send_pings(&self) -> Result<(), Error> {
+        let inner_peers = self.peers.clone();
+        let peers = inner_peers.lock().unwrap();
+        for id in peers.iter().map(|peer| peer.id.clone()) {
+            self.send_ping(&id)?;
+        }
+        Ok(())
+    }
+
+    /// Send a ping request to a peer
+    pub fn send_ping(&self, to: &PeerId) -> Result<(), Error> {
+        let conn = Peer::send_request(&to, Request::Ping)?;
+        self.handle_response(conn)
     }
 }
 

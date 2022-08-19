@@ -1,9 +1,8 @@
 use harbor::peer;
-use log::{debug, error, info, log_enabled, Level};
 use std::{env, error::Error};
 
 fn peer(port: u16) -> Result<(), Box<dyn Error>> {
-    let mut peer = peer::Peer::new(true, port)?;
+    let peer = peer::Peer::new(true, port)?;
 
     // If bootstrap peer, don't send pings
     if port == 3300 {
