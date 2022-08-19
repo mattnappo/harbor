@@ -6,9 +6,11 @@ use crate::{
 };
 use chrono;
 use derivative::Derivative;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
+    fmt,
     io::prelude::*,
     net::{IpAddr, Ipv4Addr, TcpListener, TcpStream},
     sync::{Arc, Mutex},
@@ -21,11 +23,17 @@ pub struct Key(String);
 
 /// A unique identifier for peers on the network based on libp2p's
 /// multiaddr
-#[derive(Serialize, Deserialize, Debug, Hash, Clone)]
+#[derive(Serialize, Deserialize, Hash, Clone)]
 pub struct PeerId {
     id: String,
     ip: Ipv4Addr,
     port: u16,
+}
+
+impl fmt::Debug for PeerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.id)
+    }
 }
 
 impl std::cmp::PartialEq for PeerId {
@@ -145,7 +153,8 @@ impl Peer {
         // This loop will run forever
         // TODO: Handle incoming connections in a separate thread
         let socket = TcpListener::bind(&self.id.as_socket())?;
-        println!("bound on socket {:?}", self.id);
+        info!("starting peer {:#?}", self);
+        info!("bound peer on socket {:?}", self.id.as_socket());
 
         // TODO: Delete, replace with RPC
         if send_pings {
@@ -153,7 +162,7 @@ impl Peer {
         }
 
         loop {
-            println!("listening for incoming conns");
+            info!("listening for incoming connections");
             // Listen for new incoming connections (requests)
             for stream in socket.incoming() {
                 self.handle_conn(stream?)?;
@@ -206,15 +215,13 @@ impl Peer {
 
     /// Handle a new incoming connection (a request)
     fn handle_conn(&self, mut conn: TcpStream) -> Result<(), Error> {
-        println!("handling new conn {:?}", conn); // SAME CONN A
-
         let peers = self.peers.clone();
         thread::spawn(move || -> Result<(), Error> {
             let mut buf = vec![0u8; MAX_TRANSFER_SIZE];
             let len = conn.read(&mut buf)?;
             let request = bincode::deserialize::<Request>(&buf[0..len]).unwrap();
 
-            println!("handling request {request:?} from {conn:?}");
+            info!("handling request {request:?} from {conn:?}");
 
             // Handle request
             let mut peers = peers.lock().unwrap();
@@ -248,25 +255,18 @@ impl Peer {
 
     /// Handle a response
     fn handle_response(&self, mut conn: TcpStream) -> Result<(), Error> {
-        println!("handling response from conn {conn:?}");
+        info!("handling response from conn {conn:?}");
 
         thread::spawn(move || -> Result<(), Error> {
             let mut buf = Vec::new();
             conn.read_to_end(&mut buf)?; // Can read to end because socket closes
-            println!("read buf {buf:?}");
-
-            println!("buf: {buf:?}");
-
-            println!("got data");
 
             let response = bincode::deserialize::<Response>(&buf[..]).unwrap();
-            println!("got data here");
-
-            println!("response is {response:?}");
+            info!("handling response {response:?} from conn {conn:?}");
 
             // Call the handlers defined in Protocol impl
             match &response {
-                Response::Pong => println!("got a pong from {conn:?}!"),
+                Response::Pong => info!("got a pong from {conn:?}!"),
                 _ => todo!(),
             };
             Ok(())

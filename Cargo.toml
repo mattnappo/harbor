@@ -18,3 +18,5 @@ sha2 = "0.10.2"
 hex = "0.4.3"
 chrono = { version = "0.4.22", features = ["serde"] }
 derivative = "2.2.0"
+env_logger = "0.9.0"
+log = "0.4.17"

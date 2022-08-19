@@ -7,7 +7,10 @@ pub mod protocol;
 pub mod transport;
 pub mod util;
 
+/// Maximum number of peers on the network
 pub const MAX_PEERS: u8 = 32;
+
+/// Path to local file to read bootstrap PeerId's from
 pub const BOOTSTRAP_FILE: &str = "bootstrap.txt";
 
 use crate::peer::PeerId;

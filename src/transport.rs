@@ -3,6 +3,7 @@ use crate::{
     protocol::{NetworkResult, Request, Response},
     NetworkError,
 };
+use log::info;
 use std::{
     io::prelude::*,
     net::{Shutdown, TcpStream},
@@ -21,25 +22,21 @@ impl Transport for Peer {
     fn send_request(to_peer: &PeerId, req: Request) -> NetworkResult<TcpStream> {
         // Dial the peer
         let mut conn = TcpStream::connect(to_peer.as_socket())?;
-        println!("dialed addr: {:?}", to_peer);
-        println!("built connection {:?}", conn);
+        info!("dialed peer {:?}", to_peer);
 
         // Assume, for now, that req is of type Request::Ping (why did i write this)
         let ser = &bincode::serialize(&req)?[..];
 
-        println!("writing req {:#?} to {:?}\nraw: {:?}", req, to_peer, ser);
-
         conn.write(ser)?;
+        info!("wrote request {req:?} to {to_peer:?}");
         Ok(conn)
     }
 
     /// Send a response to a request to the given TcpStream
     fn send_response(conn: &mut TcpStream, res: Response) -> NetworkResult<usize> {
         let ser = &bincode::serialize(&res)?[..];
-
-        println!("writing res {:#?} to {:?}\nraw: {:?}", res, conn, ser);
-
-        conn.write(ser) // SAME CONN
-            .map_err(|e| NetworkError::Fail(e.to_string()))
+        let status = conn.write(ser)?;
+        info!("wrote response {res:?} to {conn:?}");
+        Ok(status)
     }
 }

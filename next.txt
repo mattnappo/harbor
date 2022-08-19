@@ -1,13 +1,5 @@
 how to make protocol trait functions take in data better
 
-more pressing:
-should requests be sent without directly awaiting a response?
-should that stream stay open? or should the peer responding re-dial
-the requesting peer each time? (so that the requester doesnt have to block)
-then each request/response pair will be given an ID to keep track of which
-response corresponds to which request
-answer: keep streams open. much simpler for now
-
 Next up
 [ ] Logging / clean print statements
 [X] Implement PeerId hashes

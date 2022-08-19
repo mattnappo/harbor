@@ -1,4 +1,5 @@
 use crate::{peer::*, transport::Transport, Error, NetworkError};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::{
     io::prelude::*,
@@ -95,9 +96,7 @@ pub trait Protocol {
 impl Protocol for Peer {
     /// Handle an incoming Request::Ping
     fn handle_ping(conn: &mut TcpStream, req: &Request) -> NetworkResult<usize> {
-        println!("writing pong");
         let len = Peer::send_response(conn, Response::Pong)?;
-        println!("finished writing pong");
         Ok(len)
     }
 
@@ -114,10 +113,6 @@ impl Protocol for Peer {
         req: &Request,
         ps: &PeerStore,
     ) -> NetworkResult<usize> {
-        println!("writing peer store");
-        //let ser = &bincode::serialize(ps)?[..];
-
-        //write_and_map!(conn, &Response::PeerStore(ps.to_owned()))
         Peer::send_response(conn, Response::PeerStore(ps.to_owned()))
     }
 
